@@ -678,6 +678,7 @@ if (_chatSettingsEl) _chatSettingsEl.addEventListener('click', () => {
     const autoToggle = document.getElementById('auto-send-toggle');
     if (autoToggle) autoToggle.classList.toggle('active', !!settings.autoSendEnabled);
     updateAutoSendUI();
+    if (typeof updateCombineCardsUI === 'function') updateCombineCardsUI(); // 每次打开设置都重新刷新一次，跟"主动发消息"那个开关同样的做法，避免显示的还是网页刚启动、设置数据还没读完时的旧状态
     updateDelayUI();
     const immToggle = document.getElementById('immersive-toggle');
     if (immToggle) immToggle.classList.toggle('active', document.body.classList.contains('immersive-mode'));
@@ -1532,6 +1533,45 @@ autoSendSlider.addEventListener('input', (e) => {
     settings.autoSendInterval = val;
     autoSendValue.textContent = `${val}分钟`;
 });
+
+const combineCardsToggle  = document.getElementById('combine-cards-toggle');
+const combineCardsControl = document.getElementById('combine-cards-control');
+const combineCardsSlider  = document.getElementById('combine-cards-slider');
+const combineCardsValue   = document.getElementById('combine-cards-value');
+
+const updateCombineCardsUI = () => {
+    const on = !!settings.combineReplyCards;
+    combineCardsToggle.classList.toggle('active', on);
+    combineCardsSlider.disabled = !on;
+    combineCardsControl.style.opacity = on ? '1' : '0.4';
+    combineCardsControl.style.pointerEvents = on ? 'auto' : 'none';
+    const currentVal = settings.combineReplyMaxCards || 3;
+    combineCardsSlider.value = currentVal;
+    combineCardsValue.textContent = `${currentVal}句`;
+};
+
+updateCombineCardsUI();
+
+combineCardsToggle.addEventListener('click', () => {
+    settings.combineReplyCards = !settings.combineReplyCards;
+    updateCombineCardsUI();
+    // 开关这种一次性点击的操作，不能用"等0.5秒再存"的节流保存——万一点完立刻退出网页，
+    // 这0.5秒还没到就直接白点了，等于没保存。改成点了立刻存，不等待
+    if (typeof saveData === 'function') {
+        try {
+            const p = saveData();
+            if (p && typeof p.catch === 'function') p.catch(e => console.error('[回复拼接字卡] 保存失败:', e));
+        } catch (e) { console.error('[回复拼接字卡] 保存失败:', e); }
+    }
+    showNotification(`回复拼接字卡已${settings.combineReplyCards ? '开启' : '关闭'}`, 'success');
+});
+
+combineCardsSlider.addEventListener('input', (e) => {
+    const val = parseInt(e.target.value);
+    settings.combineReplyMaxCards = val;
+    combineCardsValue.textContent = `${val}句`;
+});
+combineCardsSlider.addEventListener('change', throttledSaveData);
 
 autoSendSlider.addEventListener('change', () => {
     manageAutoSendTimer(); 
@@ -3120,8 +3160,15 @@ playlist.style.top = (rect.top + (player.classList.contains('collapsed') ? 65 : 
             DOMElements.chatContainer.addEventListener('scroll', () => {
                 const container = DOMElements.chatContainer;
                 if (!container) return;
-                if (container.scrollTop < 50 && !isLoadingHistory && messages.length > displayedMessageCount) {
+                const hasMoreOlder = msgViewMode === 'window' ? msgWinStart > 0 : (messages.length > displayedMessageCount);
+                if (container.scrollTop < 50 && !isLoadingHistory && hasMoreOlder) {
                     if (typeof loadMoreHistory === 'function') loadMoreHistory();
+                }
+                if (msgViewMode === 'window' && !isLoadingFuture && msgWinEnd < messages.length) {
+                    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+                    if (distanceFromBottom < 50) {
+                        if (typeof loadMoreFuture === 'function') loadMoreFuture();
+                    }
                 }
             });
 
