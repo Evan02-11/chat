@@ -196,6 +196,7 @@
         if (_audio) return _audio;
         _audio = new Audio(SRC);
         _audio.loop   = true;
+        // 不能 muted / volume=0：iOS 会认为没在播放而不保活。音量保持极小值，声音由 silence.mp3（纯静音文件）保证听不到
         _audio.volume = 0.01;
         _audio.preload = 'auto';
         _audio.addEventListener('play',  function(){ _setUI(true);  });
@@ -488,7 +489,7 @@ function showEmojiTab() {
         }
         item.onclick = () => {
             if (isBatchMode) {
-                batchMessages.push({ id: Date.now() + batchMessages.length, text: '', image: src });
+                batchMessages.push({ id: Date.now() + batchMessages.length, text: '', image: src, isSticker: true });
                 updateBatchPreview();
                 showNotification('已添加到批量发送', 'success', 1200);
             } else {
@@ -498,6 +499,7 @@ function showEmojiTab() {
                     text: '',
                     timestamp: new Date(),
                     image: src,
+                    isSticker: true,
                     status: 'sent',
                     type: 'normal'
                 });
